@@ -119,7 +119,7 @@ def metrics_output():
         args = request.args
     device = devices[args['type']](host=args['host'], secret=args['secret'])
     device.get_sensors()
-    metrics = ['<pre style="word-wrap: break-word; white-space: pre-wrap;">']
+    metrics = ['#']
     for sensor in device.sensors:
         vars = {
             'metric': sensor,
@@ -130,5 +130,5 @@ def metrics_output():
         metrics.append('snmp_{metric} {{host="{host}", type="{type}" }} {value}'.format(**vars))
     vars['value'] = time.time() - startTime
     metrics.append('snmp_scrape_duration {{host="{host}", type="{type}" }} {value}'.format(**vars))
-    metrics.append('</pre>')
-    return '\r\n'.join(metrics)
+    metrics.append('#')
+    return '\n'.join(metrics)
