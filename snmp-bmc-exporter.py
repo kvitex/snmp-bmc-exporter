@@ -4,6 +4,7 @@ from pprint import pprint
 from flask import Flask
 from flask import request
 import time
+import re
 
 def get_bulk(device, community_string, objid, masklength):
     obj_list = []
@@ -102,7 +103,6 @@ class SNMPSupermicro(SNMPDevice):
             sensors += list(map(lambda x: (x[0][1].strip().replace(' ','_'), sensors_readings[x[0][0]]),
                  get_bulk(self.host, self.secret, ObjectIdentity(mibs['index_mib']),11)))
             self.sensors = dict(sensors)
-
 app = Flask(__name__)
 @app.route('/metrics', methods=['GET', 'POST'])
 def metrics_output():
@@ -122,7 +122,7 @@ def metrics_output():
     metrics = ['#']
     for sensor in device.sensors:
         vars = {
-            'metric': sensor,
+            'metric': re.sub('\x01|\.','_',sensor),
             'host': args['host'],
             'type': args['type'],
             'value': device.sensors[sensor]
