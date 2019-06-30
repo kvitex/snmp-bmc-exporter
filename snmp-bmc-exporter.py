@@ -122,7 +122,7 @@ def metrics_output():
     metrics = ['#']
     for sensor in device.sensors:
         vars = {
-            'metric': re.sub('\x01|\.','_',sensor),
+            'metric': re.sub('\x01|\.|-','_',sensor),
             'host': args['host'],
             'type': args['type'],
             'value': device.sensors[sensor]
