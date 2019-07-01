@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from pysnmp.hlapi import *
-from pprint import pprint
 from flask import Flask
 from flask import request
 import time
@@ -55,7 +54,49 @@ class SNMPDevice(object):
         self.username = kwargs.get('username', '')
         self.secret = kwargs['secret']
         self.sensors_mibs = [{'index_mib' : '', 'reading_mib': ''}]
-        self.sensors = {}
+        self.sensor_snmp_mask = 0
+        self.sensors = []
+        self.metrics = []
+        self.metric_templates = []
+        self.metric_prefix = 'snmp_'
+        self.metric_sub = '\x01|\.|-| '
+        self.metric_repl = '_'
+        return
+    
+
+    def get_sensors(self, **kwargs):
+        self.sensors = []
+        for mibs in self.sensors_mibs:
+            # getting list of sensors values with and map it to dict with mib last octet as a key 
+            sensors_readings = dict(map(lambda x: (x[0][0], x[0][1]),
+                 get_bulk(self.host, self.secret, ObjectIdentity(mibs['reading_mib']), kwargs.get('mask', self.sensor_snmp_mask))))
+            # getting index of sensors and map to dict sensors name as a key 
+            # and sensor values from previous sensors_readings dict     
+            self.sensors += list(map(lambda x: (x[0][1].strip(), sensors_readings[x[0][0]]),
+                 get_bulk(self.host, self.secret, ObjectIdentity(mibs['index_mib']), kwargs.get('mask', self.sensor_snmp_mask))))
+        return
+            
+
+    def sensors_to_metrics(self):
+        self.metrics = []
+        for sensor in self.sensors:
+            metric_string = '{prefix}{metric} {{}} {metric_value}'.format(
+                        prefix=self.metric_prefix,
+                        metric=re.sub(self.metric_sub, self.metric_repl,sensor[0]),
+                        metric_value=sensor[1]
+                        )    
+            for template in self.metric_templates:
+                if template['check_name'](sensor[0]) is not None:
+                    metric_string = '{prefix}{metric} {{ {label}="{label_value}" }} {metric_value}'.format(
+                        prefix=self.metric_prefix, 
+                        metric=template['name'],
+                        label=template['label'],
+                        label_value=template['get_index'](sensor[0]),
+                        metric_value=sensor[1]
+                        )
+            self.metrics.append(metric_string)
+        return
+            
 
 class SNMPQct(SNMPDevice):
     def __init__(self, **kwargs):
@@ -70,19 +111,28 @@ class SNMPQct(SNMPDevice):
             'reading_mib': '.1.3.6.1.4.1.7244.1.2.1.3.3.1.4.'
             }
             ]
-        
-
-    def get_sensors(self):
-        sensors = []
-        for mibs in self.sensors_mibs:
-            # getting list of sensors values with and map it to dict with mib last octet as a key 
-            sensors_readings = dict(map(lambda x: (x[0][0], x[0][1]),
-                 get_bulk(self.host, self.secret, ObjectIdentity(mibs['reading_mib']),14)))
-            # getting index of sensors and map to dict sensors name as a key 
-            # and sensor values from previous sensors_readings dict   
-            sensors += list(map(lambda x: (x[0][1].strip().replace(' ','_'), sensors_readings[x[0][0]]),
-                 get_bulk(self.host, self.secret, ObjectIdentity(mibs['index_mib']),14)))
-        self.sensors = dict(sensors)
+        self.sensor_snmp_mask = 14
+        self.metric_templates = [
+            {
+                'check_name': lambda x: re.search('P(\d{1,3}) Temp', x),
+                'get_index': lambda x: re.search('P(\d{1,3}) Temp', x)[1],
+                'label': 'cpu_num',
+                'name': 'cpu_temp'         
+            },
+            {
+                'check_name': lambda x: re.search('GPU(\d{1,3}).*?TEMP', x),
+                'get_index': lambda x: re.search('GPU(\d{1,3}).*?TEMP', x)[1],
+                'label': 'gpu_num',
+                'name': 'gpu_temp'         
+            },
+            {
+                'check_name': lambda x: re.search('FAN_SYS(\d{1,3}_\d{1,3}).*', x),
+                'get_index': lambda x: re.search('FAN_SYS(\d{1,3}_\d{1,3}).*', x)[1],
+                'label': 'fan_num',
+                'name': 'fan'         
+            }
+        ]
+        return
 
 class SNMPSupermicro(SNMPDevice):
     def __init__(self, **kwargs):
@@ -91,25 +141,35 @@ class SNMPSupermicro(SNMPDevice):
             'index_mib': '.1.3.6.1.4.1.21317.1.3.1.13.',
             'reading_mib': '.1.3.6.1.4.1.21317.1.3.1.2.'
             }]
+        self.sensor_snmp_mask = 11
+        self.metric_templates = [
+            {
+                'check_name': lambda x: re.search('CPU(\d{1,3}).*?Temp', x),
+                'get_index': lambda x: re.search('CPU(\d{1,3}).*?Temp', x)[1],
+                'label': 'cpu_num',
+                'name': 'cpu_temp'         
+            },
+            {
+                'check_name': lambda x: re.search('GPU(\d{1,3}).*?Temp', x),
+                'get_index': lambda x: re.search('GPU(\d{1,3}).*?Temp', x)[1],
+                'label': 'gpu_num',
+                'name': 'gpu_temp'         
+            },
+            {
+                'check_name': lambda x: re.search('FAN([\d,A-Z]{1,3}).*', x),
+                'get_index': lambda x: re.search('FAN([\d,A-Z]{1,3}).*', x)[1],
+                'label': 'fan_num',
+                'name': 'fan'         
+            }
+        ]
+        return
 
-    def get_sensors(self):
-        sensors = []
-        for mibs in self.sensors_mibs:
-            # getting list of sensors values with and map it to dict with mib last octet as a key 
-            sensors_readings = dict(map(lambda x: (x[0][0], x[0][1]),
-                 get_bulk(self.host, self.secret, ObjectIdentity(mibs['reading_mib']),11)))
-            # getting index of sensors and map to dict sensors name as a key 
-            # and sensor values from previous sensors_readings dict     
-            sensors += list(map(lambda x: (x[0][1].strip().replace(' ','_'), sensors_readings[x[0][0]]),
-                 get_bulk(self.host, self.secret, ObjectIdentity(mibs['index_mib']),11)))
-            self.sensors = dict(sensors)
+
 app = Flask(__name__)
 @app.route('/metrics', methods=['GET', 'POST'])
 def metrics_output():
-#if __name__ == "__main__":
-
     startTime = time.time()
-    devices = {
+    device_types = {
         'supermicro': SNMPSupermicro,
         'qct': SNMPQct
     }
@@ -117,18 +177,7 @@ def metrics_output():
         args = request.form
     else:
         args = request.args
-    device = devices[args['type']](host=args['host'], secret=args['secret'])
+    device = device_types[args['type']](host=args['host'], secret=args['secret'])
     device.get_sensors()
-    metrics = ['#']
-    for sensor in device.sensors:
-        vars = {
-            'metric': re.sub('\x01|\.|-','_',sensor),
-            'host': args['host'],
-            'type': args['type'],
-            'value': device.sensors[sensor]
-        }
-        metrics.append('snmp_{metric} {{host="{host}", type="{type}" }} {value}'.format(**vars))
-    vars['value'] = time.time() - startTime
-    metrics.append('snmp_scrape_duration {{host="{host}", type="{type}" }} {value}'.format(**vars))
-    metrics.append('#')
-    return '\n'.join(metrics)
+    device.sensors_to_metrics()
+    return '\n'.join(device.metrics + ['snmp_scrape_duration {{}} {}'.format(time.time() - startTime)])
