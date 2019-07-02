@@ -80,11 +80,11 @@ class SNMPDevice(object):
     def sensors_to_metrics(self):
         self.metrics = []
         for sensor in self.sensors:
-            metric_string = '{prefix}{metric} {{}} {metric_value}'.format(
-                        prefix=self.metric_prefix,
-                        metric=re.sub(self.metric_sub, self.metric_repl,sensor[0]),
-                        metric_value=sensor[1]
-                        )    
+            #metric_string = '{prefix}{metric} {{}} {metric_value}'.format(
+            #            prefix=self.metric_prefix,
+            #            metric=re.sub(self.metric_sub, self.metric_repl,sensor[0]),
+            #            metric_value=sensor[1]
+            #            )    
             for template in self.metric_templates:
                 if template['check_name'](sensor[0]) is not None:
                     metric_string = '{prefix}{metric} {{ {label}="{label_value}" }} {metric_value}'.format(
