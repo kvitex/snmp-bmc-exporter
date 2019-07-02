@@ -94,7 +94,7 @@ class SNMPDevice(object):
                         label_value=template['get_index'](sensor[0]),
                         metric_value=sensor[1]
                         )
-            self.metrics.append(metric_string)
+                    self.metrics.append(metric_string)
         return
             
 
