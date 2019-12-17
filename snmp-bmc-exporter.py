@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pysnmp.hlapi import *
+from copy import deepcopy
 from flask import Flask
 from flask import request
 import time
@@ -180,4 +181,5 @@ def metrics_output():
     device = device_types[args['type']](host=args['host'], secret=args['secret'])
     device.get_sensors()
     device.sensors_to_metrics()
-    return '\n'.join(device.metrics + ['snmp_scrape_duration {{}} {}'.format(time.time() - startTime)])
+    metrics_list = deepcopy(device.metrics)
+    return '\n'.join(metrics_list + ['snmp_scrape_duration {{}} {}'.format(time.time() - startTime)])
