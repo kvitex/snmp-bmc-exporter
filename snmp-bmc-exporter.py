@@ -181,5 +181,5 @@ def metrics_output():
     device = device_types[args['type']](host=args['host'], secret=args['secret'])
     device.get_sensors()
     device.sensors_to_metrics()
-    metrics_list = deepcopy(device.metrics)
+    metrics_list = list(map(lambda st: str(st), device.metrics))
     return '\n'.join(metrics_list + ['snmp_scrape_duration {{}} {}'.format(time.time() - startTime)])
